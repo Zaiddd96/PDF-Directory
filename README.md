@@ -29,21 +29,6 @@ PDF Directory is a beautifully designed Flutter application that helps users man
 
 ---
 
-## 📂 Folder Structure
-
-lib/
-├── models/
-│ └── pdf_file_model.dart # Model representing each PDF file
-├── screens/
-│ ├── downloaded_reports_screen.dart # Main screen for managing PDFs
-│ └── download_pdf_screen.dart # Screen to download PDF via URL
-├── widgets/
-│ └── pdf_list_item.dart # Reusable widget for displaying PDF card
-main.dart
-
-
----
-
 ## 🔧 Functionality Breakdown
 
 ### 1. **PDF Discovery**
