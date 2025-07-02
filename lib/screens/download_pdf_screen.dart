@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../services/pdf_download_service.dart';
+import '../bloc/pdf/pdf_bloc.dart';
 
 class DownloadPdfScreen extends StatefulWidget {
   const DownloadPdfScreen({super.key});
@@ -25,6 +27,9 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
       await _downloadService.downloadAndSavePdf(urlText, filename);
 
       if (mounted) {
+        // Notify BLoC that new file is added
+        context.read<PdfBloc>().add(LoadPdfFilesEvent());
+
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("PDF downloaded successfully")),

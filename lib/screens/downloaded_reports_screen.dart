@@ -1,102 +1,29 @@
-import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
-import 'package:pdf_directory/models/pdf_file_model.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:pdf_directory/bloc/pdf/pdf_bloc.dart';
 import 'package:pdf_directory/screens/download_pdf_screen.dart';
-import '../widgets/pdf_list_item.dart';
+import 'package:pdf_directory/widgets/pdf_list_item.dart';
+import 'package:open_file/open_file.dart';
 
 class DownloadedReportsScreen extends StatefulWidget {
   const DownloadedReportsScreen({super.key});
 
   @override
-  State<DownloadedReportsScreen> createState() =>
-      _DownloadedReportsScreenState();
+  State<DownloadedReportsScreen> createState() => _DownloadedReportsScreenState();
 }
 
 class _DownloadedReportsScreenState extends State<DownloadedReportsScreen> {
-  List<PdfFileModel> allFiles = [];
-  List<PdfFileModel> files = [];
   final TextEditingController searchController = TextEditingController();
-
-  bool selectionMode = false;
-  Set<String> selectedPaths = {};
 
   void openFile(String path) {
     OpenFile.open(path);
   }
 
-  Future<void> loadPdfFiles() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final filesInDir = dir.listSync();
-
-    final pdfs = filesInDir
-        .where((file) => file.path.endsWith('.pdf'))
-        .map((file) {
-      final stat = file.statSync();
-      return PdfFileModel(
-        name: file.uri.pathSegments.last,
-        size: stat.size,
-        path: file.path,
-        modifiedAt: stat.modified,
-      );
-    }).toList();
-
-    setState(() {
-      allFiles = pdfs;
-      files = pdfs;
-      selectionMode = false;
-      selectedPaths.clear();
-    });
-  }
-
-  void filterSearchResults(String query) {
-    if (query.isEmpty) {
-      setState(() => files = allFiles);
-    } else {
-      final filtered = allFiles
-          .where((pdf) =>
-          pdf.name.toLowerCase().contains(query.toLowerCase()))
-          .toList();
-      setState(() => files = filtered);
-    }
-  }
-
-  void toggleSelection(String path) {
-    setState(() {
-      if (selectedPaths.contains(path)) {
-        selectedPaths.remove(path);
-        if (selectedPaths.isEmpty) selectionMode = false;
-      } else {
-        selectedPaths.add(path);
-        selectionMode = true;
-      }
-    });
-  }
-
-  Future<void> deleteSelectedFiles() async {
-    for (final path in selectedPaths) {
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    }
-    setState(() {
-      files.removeWhere((pdf) => selectedPaths.contains(pdf.path));
-      allFiles.removeWhere((pdf) => selectedPaths.contains(pdf.path));
-      selectedPaths.clear();
-      selectionMode = false;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Selected files deleted")),
-    );
-  }
-
   @override
   void initState() {
     super.initState();
-    loadPdfFiles();
+    context.read<PdfBloc>().add(LoadPdfFilesEvent());
   }
 
   @override
@@ -107,24 +34,44 @@ class _DownloadedReportsScreenState extends State<DownloadedReportsScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        title: Text(
-          selectionMode
-              ? "${selectedPaths.length} Selected"
-              : "PDF Directory",
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 26,
-          ),
+        title: BlocBuilder<PdfBloc, PdfState>(
+          builder: (context, state) {
+            if (state is PdfLoaded && state.selectionMode) {
+              return Text("${state.selectedPaths.length} Selected",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 26,
+                  ));
+            }
+            return const Text(
+              "PDF Directory",
+              style: TextStyle(
+                color: Colors.white54,
+                fontWeight: FontWeight.bold,
+                fontSize: 26,
+              ),
+            );
+          },
         ),
-        actions: selectionMode
-            ? [
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: deleteSelectedFiles,
+        actions: [
+          BlocBuilder<PdfBloc, PdfState>(
+            builder: (context, state) {
+              if (state is PdfLoaded && state.selectionMode) {
+                return IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: () {
+                    context.read<PdfBloc>().add(DeleteSelectedEvent());
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Selected files deleted")),
+                    );
+                  },
+                );
+              }
+              return const SizedBox.shrink();
+            },
           )
-        ]
-            : [],
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -146,7 +93,7 @@ class _DownloadedReportsScreenState extends State<DownloadedReportsScreen> {
                 ),
                 child: TextField(
                   controller: searchController,
-                  onChanged: filterSearchResults,
+                  onChanged: (query) => context.read<PdfBloc>().add(SearchPdfEvent(query)),
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     hintText: "Search PDFs...",
@@ -159,43 +106,55 @@ class _DownloadedReportsScreenState extends State<DownloadedReportsScreen> {
               ),
               const SizedBox(height: 20),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: loadPdfFiles,
-                  child: files.isEmpty
-                      ? ListView(
-                    children: const [
-                      SizedBox(height: 300),
-                      Center(
-                        child: Text(
-                          "No PDF files found",
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                    ],
-                  )
-                      : ListView.builder(
-                    itemCount: files.length,
-                    itemBuilder: (context, index) {
-                      final pdf = files[index];
-                      final isSelected = selectedPaths.contains(pdf.path);
-                      return GestureDetector(
-                        onLongPress: () => toggleSelection(pdf.path),
-                        onTap: selectionMode
-                            ? () => toggleSelection(pdf.path)
-                            : () => openFile(pdf.path),
-                        child: PdfListItem(
-                          pdf: pdf,
-                          isSelected: isSelected,
-                          onTap: () => openFile(pdf.path),
-                          onDelete: () async {
-                            toggleSelection(pdf.path);
-                            await deleteSelectedFiles();
+                child: BlocBuilder<PdfBloc, PdfState>(
+                  builder: (context, state) {
+                    if (state is PdfLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    } else if (state is PdfError) {
+                      return Center(child: Text(state.message, style: const TextStyle(color: Colors.white70)));
+                    } else if (state is PdfLoaded) {
+                      if (state.visibleFiles.isEmpty) {
+                        return ListView(
+                          children: const [
+                            SizedBox(height: 300),
+                            Center(
+                              child: Text(
+                                "No PDF files found",
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return RefreshIndicator(
+                        onRefresh: () async => context.read<PdfBloc>().add(LoadPdfFilesEvent()),
+                        child: ListView.builder(
+                          itemCount: state.visibleFiles.length,
+                          itemBuilder: (context, index) {
+                            final pdf = state.visibleFiles[index];
+                            final isSelected = state.selectedPaths.contains(pdf.path);
+                            return GestureDetector(
+                              onLongPress: () => context.read<PdfBloc>().add(ToggleSelectionEvent(pdf.path)),
+                              onTap: state.selectionMode
+                                  ? () => context.read<PdfBloc>().add(ToggleSelectionEvent(pdf.path))
+                                  : () => openFile(pdf.path),
+                              child: PdfListItem(
+                                pdf: pdf,
+                                isSelected: isSelected,
+                                onTap: () => openFile(pdf.path),
+                                onDelete: () async {
+                                  context.read<PdfBloc>().add(ToggleSelectionEvent(pdf.path));
+                                  context.read<PdfBloc>().add(DeleteSelectedEvent());
+                                },
+                                onView: () => openFile(pdf.path),
+                              ),
+                            );
                           },
-                          onView: () => openFile(pdf.path),
                         ),
                       );
-                    },
-                  ),
+                    }
+                    return const SizedBox();
+                  },
                 ),
               ),
             ],
@@ -211,7 +170,7 @@ class _DownloadedReportsScreenState extends State<DownloadedReportsScreen> {
               builder: (context) => const DownloadPdfScreen(),
             ),
           );
-          loadPdfFiles();
+          context.read<PdfBloc>().add(LoadPdfFilesEvent());
         },
         child: const Icon(Icons.download, color: Colors.white),
       ),
