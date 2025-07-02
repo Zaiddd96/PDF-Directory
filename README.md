@@ -24,6 +24,8 @@ PDF Directory is a beautifully designed Flutter application that helps users man
 | `path_provider`     | To access the app's documents directory.               |
 | `open_file`         | To open PDF files with the default external viewer.    |
 | `flutter`           | Core framework for building the app.                   |
+| `bloc`              | To implement state management using BLoC pattern.      |
+| `equatable`         | To simplify state and event comparisons in BLoC.       |
 
 > All packages are open-source and available on [pub.dev](https://pub.dev).
 
